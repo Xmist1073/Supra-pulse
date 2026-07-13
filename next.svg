@@ -1,0 +1,59 @@
+import type { Metadata } from "next";
+import { Space_Grotesk, Inter, IBM_Plex_Mono } from "next/font/google";
+import "./globals.css";
+
+// Display face — headlines only, used with restraint.
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+});
+
+// Body/UI workhorse — tuned for data density across dense card grids.
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+});
+
+// Data/numerals face — the "terminal pulse" signature: stats strip,
+// countdown chips, APY figures. Never used for prose.
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+});
+
+export const metadata: Metadata = {
+  metadataBase: new URL("https://supra-pulse.com"),
+  title: {
+    default: "Supra Pulse — Everything happening on Supra, in one place",
+    template: "%s | Supra Pulse",
+  },
+  description:
+    "The independent ecosystem hub for the Supra blockchain — projects, opportunities, testnets, grants, news, and learning resources, all in one place.",
+  openGraph: {
+    siteName: "Supra Pulse",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html
+      lang="en"
+      className={`${spaceGrotesk.variable} ${inter.variable} ${plexMono.variable} h-full antialiased`}
+    >
+      <body className="min-h-full flex flex-col bg-void text-text-primary">
+        {children}
+      </body>
+    </html>
+  );
+}

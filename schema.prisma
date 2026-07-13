@@ -1,0 +1,45 @@
+import { Button } from "@/components/ui/Button";
+import { PulseDot } from "@/components/ui/Card";
+
+/**
+ * Temporary launch placeholder — deployed first so supra-pulse.com is
+ * live from day one while the full Homepage (IA doc Section 1) is built
+ * out in subsequent steps.
+ */
+export default function ComingSoonPage() {
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
+      <PulseDot label="Building in public" />
+
+      <h1 className="mt-6 max-w-xl font-display text-4xl font-semibold tracking-tight text-text-primary sm:text-5xl">
+        Everything happening on Supra.
+        <br />
+        <span className="text-signal">One place.</span>
+      </h1>
+
+      <p className="mt-4 max-w-md text-balance text-text-secondary">
+        Supra Pulse is the independent ecosystem hub for Supra — projects,
+        opportunities, testnets, grants, news, and learning resources.
+        Launching soon.
+      </p>
+
+      <form className="mt-8 flex w-full max-w-sm flex-col gap-2 sm:flex-row">
+        <input
+          type="email"
+          required
+          placeholder="you@example.com"
+          aria-label="Email address"
+          className="w-full rounded-[--radius-control] border border-hairline bg-surface px-4 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:border-signal"
+        />
+        <Button type="submit" variant="primary" className="shrink-0">
+          Notify me
+        </Button>
+      </form>
+
+      <p className="mt-10 text-xs text-text-tertiary">
+        Supra Pulse is an independent, community-driven platform and is not
+        an official product of the Supra Foundation.
+      </p>
+    </main>
+  );
+}

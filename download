@@ -1,0 +1,19 @@
+import { AdminSidebar } from "@/components/admin/AdminSidebar";
+
+/**
+ * Wraps every admin page except /admin/login (which lives outside this
+ * route group so it renders without the sidebar). Auth is enforced in
+ * src/middleware.ts, not here — this layout only handles chrome.
+ */
+export default function AdminDashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-screen">
+      <AdminSidebar />
+      <main className="flex-1 overflow-x-hidden px-8 py-8">{children}</main>
+    </div>
+  );
+}

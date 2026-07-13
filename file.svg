@@ -1,0 +1,353 @@
+import type { Metadata } from "next";
+import Image from "next/image";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { Badge, VerifiedBadge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ProjectCard } from "@/components/cards/ProjectCard";
+
+export const revalidate = 300;
+
+interface PageProps {
+  params: Promise<{ slug: string }>;
+}
+
+// Pre-render every known project at build time — the whole point of
+// generateStaticParams here is that Directory pages stay instant even
+// as the project count grows into the hundreds, since most requests hit
+// the static/ISR cache rather than querying Postgres live.
+export async function generateStaticParams() {
+  const projects = await prisma.project.findMany({ select: { slug: true } });
+  return projects.map((p) => ({ slug: p.slug }));
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const project = await prisma.project.findUnique({ where: { slug } });
+  if (!project) return {};
+
+  const title = `${project.name} — Supra Ecosystem Project`;
+  return {
+    title,
+    description: project.oneLiner,
+    openGraph: {
+      title,
+      description: project.oneLiner,
+      images: project.coverImageUrl ? [project.coverImageUrl] : undefined,
+    },
+  };
+}
+
+const statusLabel: Record<string, string> = {
+  LIVE: "Live",
+  TESTNET: "Testnet",
+  COMING_SOON: "Coming soon",
+};
+
+const statusTone = {
+  LIVE: "live",
+  TESTNET: "warning",
+  COMING_SOON: "neutral",
+} as const;
+
+const tierTone = {
+  VERIFIED: "verified",
+  UNVERIFIED: "unverified",
+  REJECTED: "warning",
+} as const;
+
+export default async function ProjectDetailsPage({ params }: PageProps) {
+  const { slug } = await params;
+
+  const project = await prisma.project.findUnique({
+    where: { slug },
+    include: {
+      opportunities: {
+        where: { status: { in: ["ACTIVE", "ENDING_SOON"] } },
+        orderBy: { deadline: "asc" },
+      },
+      articleTags: {
+        include: { article: true },
+        where: { article: { status: "PUBLISHED" } },
+        orderBy: { article: { publishedAt: "desc" } },
+        take: 3,
+      },
+      tutorialTags: {
+        include: { tutorial: true },
+        where: { tutorial: { status: "PUBLISHED" } },
+        take: 4,
+      },
+    },
+  });
+
+  if (!project) notFound();
+
+  const similarProjects =
+    project.category.length > 0
+      ? await prisma.project.findMany({
+          where: {
+            id: { not: project.id },
+            category: { hasSome: project.category },
+          },
+          take: 4,
+        })
+      : [];
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: project.name,
+    url: project.websiteUrl,
+    description: project.oneLiner,
+    ...(project.logoUrl ? { logo: project.logoUrl } : {}),
+    sameAs: [project.xUrl, project.discordUrl, project.telegramUrl, project.githubUrl].filter(
+      Boolean
+    ),
+  };
+
+  return (
+    <article>
+      {/* eslint-disable-next-line react/no-danger */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
+      {/* Cover banner */}
+      <div className="relative h-40 w-full overflow-hidden bg-surface sm:h-56">
+        {project.coverImageUrl ? (
+          <Image
+            src={project.coverImageUrl}
+            alt=""
+            fill
+            className="object-cover"
+            priority
+          />
+        ) : (
+          <div className="h-full w-full bg-gradient-to-br from-surface to-surface-raised" />
+        )}
+      </div>
+
+      <div className="mx-auto max-w-4xl px-4 sm:px-6">
+        {/* Breadcrumb */}
+        <nav className="mt-4 text-sm text-text-tertiary">
+          <Link href="/ecosystem" className="hover:text-text-primary">
+            Ecosystem Directory
+          </Link>
+          <span className="mx-1.5">/</span>
+          <span className="text-text-secondary">{project.name}</span>
+        </nav>
+
+        {/* Header block */}
+        <div className="-mt-8 flex flex-col gap-4 sm:-mt-10 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex items-end gap-4">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-void bg-surface-raised">
+              {project.logoUrl ? (
+                <Image
+                  src={project.logoUrl}
+                  alt={`${project.name} logo`}
+                  width={80}
+                  height={80}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="font-mono text-xl text-text-tertiary">
+                  {project.name.slice(0, 2).toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div>
+              <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+                {project.name}
+              </h1>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                {project.verificationTier === "VERIFIED" ? (
+                  <VerifiedBadge />
+                ) : (
+                  <Badge tone={tierTone[project.verificationTier]}>
+                    {project.verificationTier === "UNVERIFIED" ? "Unverified" : "Rejected"}
+                  </Badge>
+                )}
+                <Badge tone={statusTone[project.status]}>
+                  {statusLabel[project.status]}
+                </Badge>
+                {project.category.map((cat) => (
+                  <Badge key={cat}>{cat}</Badge>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <Button href={project.websiteUrl} external variant="primary" className="shrink-0">
+            Visit Site
+          </Button>
+        </div>
+
+        <p className="mt-4 max-w-2xl text-text-secondary">{project.oneLiner}</p>
+
+        {/* Social/community links row */}
+        <div className="mt-4 flex flex-wrap gap-3">
+          {project.xUrl && <LinkChip href={project.xUrl} label="X" />}
+          {project.discordUrl && <LinkChip href={project.discordUrl} label="Discord" />}
+          {project.telegramUrl && <LinkChip href={project.telegramUrl} label="Telegram" />}
+          {project.docsUrl && <LinkChip href={project.docsUrl} label="Docs" />}
+          {project.githubUrl && <LinkChip href={project.githubUrl} label="GitHub" />}
+        </div>
+
+        <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-3">
+          {/* Main column */}
+          <div className="flex flex-col gap-10 lg:col-span-2">
+            <section>
+              <h2 className="text-sm font-medium text-text-primary">About</h2>
+              <p className="mt-3 whitespace-pre-line text-text-secondary">
+                {project.description}
+              </p>
+            </section>
+
+            {project.whyItMatters && (
+              <section>
+                <h2 className="text-sm font-medium text-text-primary">
+                  Why it matters
+                </h2>
+                <p className="mt-3 text-text-secondary">{project.whyItMatters}</p>
+              </section>
+            )}
+
+            {project.opportunities.length > 0 && (
+              <section>
+                <h2 className="text-sm font-medium text-text-primary">
+                  Active opportunities
+                </h2>
+                <div className="mt-3 flex flex-col gap-3">
+                  {project.opportunities.map((opp) => (
+                    <Card key={opp.id} className="flex items-center justify-between">
+                      <div>
+                        <p className="text-text-primary">{opp.title}</p>
+                        <p className="mt-0.5 font-mono text-xs text-text-tertiary">
+                          {opp.type.replace("_", " ")}
+                          {opp.deadline &&
+                            ` · ends ${opp.deadline.toLocaleDateString()}`}
+                        </p>
+                      </div>
+                      <Badge tone={opp.status === "ENDING_SOON" ? "warning" : "live"}>
+                        {opp.status === "ENDING_SOON" ? "Ending soon" : "Active"}
+                      </Badge>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {project.tutorialTags.length > 0 && (
+              <section>
+                <h2 className="text-sm font-medium text-text-primary">Tutorials</h2>
+                <div className="mt-3 flex flex-col gap-2">
+                  {project.tutorialTags.map(({ tutorial }) => (
+                    <Link
+                      key={tutorial.id}
+                      href={`/learn/${tutorial.track.toLowerCase()}/${tutorial.slug}`}
+                      className="text-sm text-signal-hover hover:underline"
+                    >
+                      {tutorial.title}
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {project.articleTags.length > 0 && (
+              <section>
+                <h2 className="text-sm font-medium text-text-primary">Latest news</h2>
+                <div className="mt-3 flex flex-col gap-3">
+                  {project.articleTags.map(({ article }) => (
+                    <Card key={article.id} href={`/news/${article.slug}`}>
+                      <p className="text-text-primary">{article.title}</p>
+                      <p className="mt-0.5 text-xs text-text-tertiary">
+                        {article.publishedAt?.toLocaleDateString()}
+                      </p>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+
+          {/* Key info rail */}
+          <aside className="flex flex-col gap-6">
+            <div className="rounded-[--radius-card] border border-hairline bg-surface p-4">
+              <dl className="flex flex-col gap-3 text-sm">
+                <InfoRow label="Status" value={statusLabel[project.status]} />
+                <InfoRow label="Chain" value={project.chainType} />
+                <InfoRow
+                  label="Token"
+                  value={project.hasToken ? project.tokenTicker || "Yes" : "No token"}
+                />
+                {project.contractAddrs.length > 0 && (
+                  <InfoRow
+                    label="Contracts"
+                    value={`${project.contractAddrs.length} published`}
+                  />
+                )}
+                <InfoRow
+                  label="Verification"
+                  value={
+                    <Link href="/how-we-verify" className="hover:underline">
+                      {project.verificationTier}
+                    </Link>
+                  }
+                />
+                <InfoRow
+                  label="Last updated"
+                  value={project.updatedAt.toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                />
+              </dl>
+            </div>
+
+            {similarProjects.length > 0 && (
+              <div>
+                <h2 className="text-sm font-medium text-text-primary">
+                  Similar projects
+                </h2>
+                <div className="mt-3 flex flex-col gap-3">
+                  {similarProjects.map((p) => (
+                    <ProjectCard key={p.id} project={p} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </aside>
+        </div>
+      </div>
+
+      <div className="h-16" />
+    </article>
+  );
+}
+
+function LinkChip({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 rounded-full border border-hairline px-3 py-1 text-xs text-text-secondary transition-colors hover:border-signal/40 hover:text-text-primary"
+    >
+      {label}
+    </a>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <dt className="text-text-tertiary">{label}</dt>
+      <dd className="text-right text-text-primary">{value}</dd>
+    </div>
+  );
+}
